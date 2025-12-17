@@ -120,88 +120,33 @@
     });
 
     async function loginWithGoogle() {
+        error = null;
+        loading = true;
+
         try {
-            error = null;
-            loading = true;
-
-            // Configuración mejorada del proveedor
-            const googleProvider = new GoogleAuthProvider();
-            googleProvider.setCustomParameters({
+            const provider = new GoogleAuthProvider();
+            provider.setCustomParameters({
                 prompt: "select_account",
-                login_hint: "",
             });
-            googleProvider.addScope("profile");
-            googleProvider.addScope("email");
 
-            // Detectar si estamos en móvil o si el ancho de la pantalla es pequeño
-            const isMobile = /iPhone|iPad|iPod|Android/i.test(
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(
                 navigator.userAgent,
             );
-            const isSmallScreen = window.innerWidth <= 768; // 768px o menos se considera móvil
 
-            // Usar redirect en móviles o pantallas pequeñas
-            if (isMobile || isSmallScreen) {
-                try {
-                    // Primero intentamos con redirect
-                    await signInWithRedirect(auth, googleProvider);
-                    // Si llegamos aquí, el redirect se inició correctamente
-                    return;
-                } catch (redirectError) {
-                    console.warn(
-                        "Redirect falló, intentando con popup:",
-                        redirectError,
-                    );
-                    // Si falla el redirect, intentamos con popup
-                    try {
-                        await signInWithPopup(auth, googleProvider);
-                    } catch (popupError) {
-                        console.error("Error en popup:", popupError);
-                        throw popupError; // Relanzar para que lo maneje el catch externo
-                    }
-                }
-            } else {
-                // En desktop, usar popup con manejo de errores mejorado
-                try {
-                    await signInWithPopup(auth, googleProvider);
-                } catch (popupError) {
-                    console.warn(
-                        "Popup falló, intentando con redirect:",
-                        popupError,
-                    );
-                    // Si falla el popup, intentamos con redirect
-                    try {
-                        await signInWithRedirect(auth, googleProvider);
-                    } catch (redirectError) {
-                        console.error("Error en redirect:", redirectError);
-                        throw redirectError; // Relanzar para que lo maneje el catch externo
-                    }
-                }
+            if (isMobile) {
+                await signInWithRedirect(auth, provider);
+                return; // 🔥 CLAVE
             }
+
+            await signInWithPopup(auth, provider);
+            loading = false;
         } catch (err) {
-            console.error("Error en login:", err);
+            console.error(err);
 
-            // Mensajes de error más descriptivos
-            if (err.code === "auth/popup-blocked") {
-                error =
-                    "El navegador bloqueó la ventana emergente. Por favor, permite ventanas emergentes para este sitio o intenta en un navegador diferente.";
-            } else if (err.code === "auth/popup-closed-by-user") {
-                // No mostrar error si el usuario cierra el popup manualmente
-                console.log("Usuario cerró la ventana de inicio de sesión");
-            } else if (err.code === "auth/unauthorized-domain") {
-                error =
-                    "Error de configuración. Por favor, contacta al administrador del sitio.";
-            } else if (err.code === "auth/network-request-failed") {
-                error =
-                    "Error de conexión. Por favor, verifica tu conexión a internet e inténtalo de nuevo.";
-            } else if (
-                err.code === "auth/account-exists-with-different-credential"
-            ) {
-                error =
-                    "Ya existe una cuenta con el mismo correo pero con otro método de inicio de sesión. Por favor, inicia sesión con el método original.";
-            } else {
-                error = `Error al iniciar sesión: ${err.message || "Inténtalo de nuevo más tarde."}`;
+            if (err.code !== "auth/popup-closed-by-user") {
+                error = err.message;
             }
-        } finally {
+
             loading = false;
         }
     }
@@ -412,7 +357,7 @@
         {#if loading}
             <LoadingSpinner />
         {:else if !user}
-            <LoginCard onLogin={loginWithGoogle} {error} />
+            <LoginCard on:login={loginWithGoogle} />
         {:else if showProfileForm}
             <ProfileForm
                 {user}
