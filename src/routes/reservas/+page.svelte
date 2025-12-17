@@ -29,7 +29,6 @@
     let horarios = [];
     let citasExistentes = [];
 
-    // handlers: loginWithGoogle, handleProfileSubmit, handleSubmit, etc
     import { onMount } from "svelte";
     import { auth } from "$lib/js/firebase";
     import {
@@ -42,7 +41,6 @@
     import {
         getClienteByUid,
         addCliente,
-        updateCliente,
     } from "../admin/clientes/js/clienteProfile";
 
     import { getHorarios } from "../admin/horarios/js/getHorarios";
@@ -52,6 +50,7 @@
 
     const provider = new GoogleAuthProvider();
 
+    // IMPORTANTE: Días en orden correcto (0 = Domingo)
     const diasSemana = [
         "Domingo",
         "Lunes",
@@ -125,13 +124,33 @@
             getServicios(),
             getCitas(),
         ]);
+
+        console.log("Horarios cargados:", horarios);
+        console.log("Servicios cargados:", servicios);
+        console.log("Citas existentes:", citasExistentes);
     }
 
     // ------------------ HORARIOS ------------------
     function getHorarioForDate(date) {
-        return horarios.find(
-            (h) => h.dia === diasSemana[new Date(date).getDay()],
+        if (!date) return null;
+
+        // Crear fecha en zona horaria local para evitar desfases
+        const [year, month, day] = date.split("-").map(Number);
+        const localDate = new Date(year, month - 1, day);
+        const dayIndex = localDate.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+
+        console.log("Fecha seleccionada:", date);
+        console.log(
+            "Día de la semana (índice):",
+            dayIndex,
+            "=",
+            diasSemana[dayIndex],
         );
+
+        const horario = horarios.find((h) => h.dia === diasSemana[dayIndex]);
+        console.log("Horario encontrado:", horario);
+
+        return horario;
     }
 
     function generateTimeSlots(inicio, fin, duracion) {
@@ -139,38 +158,62 @@
         let start = toMinutes(inicio);
         const end = toMinutes(fin);
 
+        console.log(
+            `Generando slots: ${inicio} (${start}min) a ${fin} (${end}min), duración: ${duracion}min`,
+        );
+
         while (start + duracion <= end) {
             slots.push(fromMinutes(start));
             start += duracion;
         }
 
+        console.log("Slots generados:", slots);
         return slots;
     }
 
     function isTimeSlotAvailable(date, time, duracion) {
-        return !citasExistentes.some((c) => {
+        const available = !citasExistentes.some((c) => {
             if (c.fecha !== date) return false;
             const start = toMinutes(c.hora);
             const end = start + c.duracion;
             const current = toMinutes(time);
             return current < end && current + duracion > start;
         });
+
+        return available;
     }
 
     function updateAvailableTimes() {
         availableTimes = [];
-        if (!selectedDate || !selectedService) return;
+        if (!selectedDate || !selectedService) {
+            console.log("Falta fecha o servicio");
+            return;
+        }
 
         const horario = getHorarioForDate(selectedDate);
-        if (!horario || horario.cerrado) return;
 
-        availableTimes = generateTimeSlots(
+        if (!horario) {
+            console.log("No hay horario definido para este día");
+            return;
+        }
+
+        if (horario.cerrado) {
+            console.log("El día está cerrado");
+            return;
+        }
+
+        console.log("Generando horarios disponibles...");
+        const allSlots = generateTimeSlots(
             horario.horaApertura,
             horario.horaCierre,
             selectedService.duracion,
-        ).filter((t) =>
+        );
+
+        availableTimes = allSlots.filter((t) =>
             isTimeSlotAvailable(selectedDate, t, selectedService.duracion),
         );
+
+        console.log("Horarios disponibles:", availableTimes);
     }
 
     function toMinutes(h) {
@@ -182,31 +225,47 @@
         return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
     }
 
-    $: updateAvailableTimes();
+    // Reactivo: cuando cambia servicio o fecha
+    $: if (selectedService || selectedDate) {
+        selectedTime = "";
+        updateAvailableTimes();
+    }
 
     // ------------------ RESERVA ------------------
     async function handleSubmit() {
-        isSubmitting = true;
+        try {
+            isSubmitting = true;
+            error = null;
 
-        await addCita({
-            clienteId: user.uid,
-            clienteNombre: profileNombre,
-            clienteTelefono: profileTelefono,
-            servicioId: selectedService.id,
-            servicioNombre: selectedService.nombre,
-            duracion: selectedService.duracion,
-            precio: selectedService.precio,
-            fecha: selectedDate,
-            hora: selectedTime,
-            estado: "pendiente",
-        });
+            await addCita({
+                clienteId: user.uid,
+                clienteNombre: profileNombre,
+                clienteTelefono: profileTelefono,
+                clienteEmail: user.email,
+                clienteFoto: user.photoURL || "",
+                servicioId: selectedService.id,
+                servicioNombre: selectedService.nombre,
+                duracion: selectedService.duracion,
+                precio: selectedService.precio,
+                fecha: selectedDate,
+                hora: selectedTime,
+                estado: "pendiente",
+            });
 
-        success = true;
-        selectedService = null;
-        selectedDate = "";
-        selectedTime = "";
-        availableTimes = [];
-        isSubmitting = false;
+            success = true;
+            selectedService = null;
+            selectedDate = "";
+            selectedTime = "";
+            availableTimes = [];
+
+            // Recargar citas para actualizar disponibilidad
+            await loadData();
+        } catch (err) {
+            console.error("Error al crear reserva:", err);
+            error = "Error al crear la reserva. Por favor intenta nuevamente.";
+        } finally {
+            isSubmitting = false;
+        }
     }
 </script>
 
