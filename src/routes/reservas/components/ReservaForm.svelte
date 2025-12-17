@@ -1,7 +1,7 @@
 <script>
     export let servicios = [];
     export let horarios = [];
-    export let citasExistentes = [];
+    export const citasExistentes = [];
     export let selectedService = null;
     export let selectedDate = "";
     export let selectedTime = "";
@@ -76,7 +76,10 @@
     <form on:submit|preventDefault={onSubmit} class="space-y-6">
         <!-- SELECCIÓN DE SERVICIO -->
         <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-3">
+            <label
+                class="block text-sm font-semibold text-gray-700 mb-3"
+                for="servicio"
+            >
                 <i class="fas fa-cut mr-2 text-gray-500"></i>
                 Selecciona un servicio *
             </label>
@@ -183,7 +186,10 @@
         <!-- SELECCIÓN DE HORA -->
         {#if selectedService && selectedDate && isDayAvailable(selectedDate)}
             <div class="animate-fadeIn">
-                <label class="block text-sm font-semibold text-gray-700 mb-3">
+                <label
+                    class="block text-sm font-semibold text-gray-700 mb-3"
+                    for="hora"
+                >
                     <i class="fas fa-clock mr-2 text-gray-500"></i>
                     Selecciona una hora *
                 </label>

@@ -2,9 +2,10 @@
     import LoadingSpinner from "$lib/components/LoadingSpinner.svelte";
     import LoginCard from "./components/LoginCard.svelte";
     import ProfileForm from "./components/ProfileForm.svelte";
-    import ReservaHeader from "./components/ReservaHeader.svelte";
+    import ProfileCard from "./components/ProfileCard.svelte";
     import AlertMessage from "./components/AlertMessage.svelte";
     import ReservaForm from "./components/ReservaForm.svelte";
+    import HistorialReservas from "./components/HistorialReservas.svelte";
 
     // PERFIL
     let profileNombre = "";
@@ -28,12 +29,15 @@
     let servicios = [];
     let horarios = [];
     let citasExistentes = [];
+    let misReservas = [];
 
     import { onMount } from "svelte";
     import { auth } from "$lib/js/firebase";
     import {
         GoogleAuthProvider,
         signInWithPopup,
+        signInWithRedirect,
+        getRedirectResult,
         onAuthStateChanged,
         signOut,
     } from "firebase/auth";
@@ -45,10 +49,17 @@
 
     import { getHorarios } from "../admin/horarios/js/getHorarios";
     import { getServicios } from "../admin/servicios/js/getServicios";
-    import { getCitas } from "../admin/citas/js/getReservation";
+    import {
+        getCitas,
+        getCitasCliente,
+    } from "../admin/citas/js/getReservation";
     import { addCita } from "../admin/citas/js/addReservation";
 
     const provider = new GoogleAuthProvider();
+    // Forzar selección de cuenta cada vez
+    provider.setCustomParameters({
+        prompt: "select_account",
+    });
 
     // IMPORTANTE: Días en orden correcto (0 = Domingo)
     const diasSemana = [
@@ -62,7 +73,19 @@
     ];
 
     // ------------------ AUTH ------------------
-    onMount(() => {
+    onMount(async () => {
+        // Verificar si hay resultado de redirect
+        try {
+            const result = await getRedirectResult(auth);
+            if (result) {
+                console.log("Usuario autenticado desde redirect:", result.user);
+            }
+        } catch (error) {
+            console.error("Error en redirect:", error);
+            error = `Error de autenticación: ${error.message}`;
+        }
+
+        // Escuchar cambios de autenticación
         return onAuthStateChanged(auth, async (userAuth) => {
             loading = true;
             user = userAuth;
@@ -73,29 +96,77 @@
                 return;
             }
 
-            const profile = await getClienteByUid(userAuth.uid);
+            try {
+                const profile = await getClienteByUid(userAuth.uid);
 
-            if (!profile) {
-                showProfileForm = true;
-                profileNombre = userAuth.displayName || "";
-                profileTelefono = "";
-            } else {
-                profileNombre = profile.nombre;
-                profileTelefono = profile.telefono;
-                showProfileForm = false;
-                await loadData();
+                if (!profile) {
+                    showProfileForm = true;
+                    profileNombre = userAuth.displayName || "";
+                    profileTelefono = "";
+                } else {
+                    profileNombre = profile.nombre;
+                    profileTelefono = profile.telefono;
+                    showProfileForm = false;
+                    await loadData();
+                    await loadMisReservas();
+                }
+            } catch (err) {
+                console.error("Error cargando perfil:", err);
+                error = "Error al cargar el perfil del usuario";
+            } finally {
+                loading = false;
             }
-
-            loading = false;
         });
     });
 
     async function loginWithGoogle() {
-        await signInWithPopup(auth, provider);
+        try {
+            error = null;
+
+            // Detectar si estamos en móvil
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(
+                navigator.userAgent,
+            );
+
+            if (isMobile) {
+                // En móvil usar redirect (más confiable)
+                await signInWithRedirect(auth, provider);
+            } else {
+                // En desktop usar popup
+                await signInWithPopup(auth, provider);
+            }
+        } catch (err) {
+            console.error("Error en login:", err);
+
+            // Mensajes de error más amigables
+            if (err.code === "auth/popup-blocked") {
+                error =
+                    "El navegador bloqueó la ventana emergente. Por favor, permite ventanas emergentes para este sitio.";
+            } else if (err.code === "auth/popup-closed-by-user") {
+                error = "Inicio de sesión cancelado.";
+            } else if (err.code === "auth/unauthorized-domain") {
+                error =
+                    "Este dominio no está autorizado. Contacta al administrador.";
+            } else {
+                error = `Error al iniciar sesión: ${err.message}`;
+            }
+        }
     }
 
     async function logout() {
-        await signOut(auth);
+        try {
+            await signOut(auth);
+            // Limpiar estado
+            profileNombre = "";
+            profileTelefono = "";
+            selectedService = null;
+            selectedDate = "";
+            selectedTime = "";
+            misReservas = [];
+        } catch (err) {
+            console.error("Error en logout:", err);
+            error = "Error al cerrar sesión";
+        }
     }
 
     // ------------------ PERFIL ------------------
@@ -105,52 +176,79 @@
             return;
         }
 
-        await addCliente({
-            uid: user.uid,
-            nombre: profileNombre,
-            telefono: profileTelefono,
-            email: user.email,
-            photoURL: user.photoURL,
-        });
+        try {
+            await addCliente({
+                uid: user.uid,
+                nombre: profileNombre,
+                telefono: profileTelefono,
+                email: user.email,
+                photoURL: user.photoURL,
+            });
 
-        showProfileForm = false;
-        await loadData();
+            showProfileForm = false;
+            await loadData();
+            await loadMisReservas();
+        } catch (err) {
+            console.error("Error guardando perfil:", err);
+            error = "Error al guardar el perfil";
+        }
     }
 
     // ------------------ DATA ------------------
     async function loadData() {
-        [horarios, servicios, citasExistentes] = await Promise.all([
-            getHorarios(),
-            getServicios(),
-            getCitas(),
-        ]);
+        try {
+            [horarios, servicios, citasExistentes] = await Promise.all([
+                getHorarios(),
+                getServicios(),
+                getCitas(),
+            ]);
+        } catch (err) {
+            console.error("Error cargando datos:", err);
+            error = "Error al cargar los datos";
+        }
+    }
 
-        console.log("Horarios cargados:", horarios);
-        console.log("Servicios cargados:", servicios);
-        console.log("Citas existentes:", citasExistentes);
+    async function loadMisReservas() {
+        try {
+            if (!user || !user.uid) {
+                console.log("No hay usuario autenticado");
+                misReservas = [];
+                return;
+            }
+
+            console.log("Cargando reservas para el usuario:", user.uid);
+            const reservas = await getCitasCliente(user.uid);
+
+            if (!Array.isArray(reservas)) {
+                console.error("Las reservas no son un array:", reservas);
+                misReservas = [];
+                return;
+            }
+
+            // Asegurarse de que las fechas estén en el formato correcto
+            misReservas = reservas.map((reserva) => ({
+                ...reserva,
+                fecha: reserva.fecha?.split("T")[0] || reserva.fecha,
+            }));
+
+            console.log("Reservas cargadas correctamente:", misReservas);
+        } catch (err) {
+            console.error("Error cargando mis reservas:", err);
+            misReservas = [];
+            error =
+                "Error al cargar el historial de reservas. Intenta recargar la página.";
+        }
     }
 
     // ------------------ HORARIOS ------------------
     function getHorarioForDate(date) {
         if (!date) return null;
 
-        // Crear fecha en zona horaria local para evitar desfases
         const [year, month, day] = date.split("-").map(Number);
         const localDate = new Date(year, month - 1, day);
-        const dayIndex = localDate.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+        const dayIndex = localDate.getDay();
 
-        console.log("Fecha seleccionada:", date);
-        console.log(
-            "Día de la semana (índice):",
-            dayIndex,
-            "=",
-            diasSemana[dayIndex],
-        );
-
-        const horario = horarios.find((h) => h.dia === diasSemana[dayIndex]);
-        console.log("Horario encontrado:", horario);
-
-        return horario;
+        return horarios.find((h) => h.dia === diasSemana[dayIndex]);
     }
 
     function generateTimeSlots(inicio, fin, duracion) {
@@ -158,51 +256,32 @@
         let start = toMinutes(inicio);
         const end = toMinutes(fin);
 
-        console.log(
-            `Generando slots: ${inicio} (${start}min) a ${fin} (${end}min), duración: ${duracion}min`,
-        );
-
         while (start + duracion <= end) {
             slots.push(fromMinutes(start));
             start += duracion;
         }
 
-        console.log("Slots generados:", slots);
         return slots;
     }
 
     function isTimeSlotAvailable(date, time, duracion) {
-        const available = !citasExistentes.some((c) => {
+        return !citasExistentes.some((c) => {
             if (c.fecha !== date) return false;
             const start = toMinutes(c.hora);
             const end = start + c.duracion;
             const current = toMinutes(time);
             return current < end && current + duracion > start;
         });
-
-        return available;
     }
 
     function updateAvailableTimes() {
         availableTimes = [];
-        if (!selectedDate || !selectedService) {
-            console.log("Falta fecha o servicio");
-            return;
-        }
+        if (!selectedDate || !selectedService) return;
 
         const horario = getHorarioForDate(selectedDate);
 
-        if (!horario) {
-            console.log("No hay horario definido para este día");
-            return;
-        }
+        if (!horario || horario.cerrado) return;
 
-        if (horario.cerrado) {
-            console.log("El día está cerrado");
-            return;
-        }
-
-        console.log("Generando horarios disponibles...");
         const allSlots = generateTimeSlots(
             horario.horaApertura,
             horario.horaCierre,
@@ -212,8 +291,6 @@
         availableTimes = allSlots.filter((t) =>
             isTimeSlotAvailable(selectedDate, t, selectedService.duracion),
         );
-
-        console.log("Horarios disponibles:", availableTimes);
     }
 
     function toMinutes(h) {
@@ -258,8 +335,16 @@
             selectedTime = "";
             availableTimes = [];
 
-            // Recargar citas para actualizar disponibilidad
+            // Recargar datos
             await loadData();
+            await loadMisReservas();
+
+            // Scroll al historial
+            setTimeout(() => {
+                document.getElementById("historial-reservas")?.scrollIntoView({
+                    behavior: "smooth",
+                });
+            }, 100);
         } catch (err) {
             console.error("Error al crear reserva:", err);
             error = "Error al crear la reserva. Por favor intenta nuevamente.";
@@ -269,12 +354,12 @@
     }
 </script>
 
-<section class="w-full min-h-screen bg-gray-50 py-8 px-6">
+<section class="w-full min-h-screen bg-gray-50 py-8 px-4 sm:px-6">
     <div class="max-w-4xl mx-auto">
         {#if loading}
             <LoadingSpinner />
         {:else if !user}
-            <LoginCard onLogin={loginWithGoogle} />
+            <LoginCard onLogin={loginWithGoogle} {error} />
         {:else if showProfileForm}
             <ProfileForm
                 {user}
@@ -285,7 +370,8 @@
             />
         {:else}
             <div class="space-y-6">
-                <ReservaHeader
+                <!-- 1. PERFIL DEL USUARIO -->
+                <ProfileCard
                     {user}
                     profile={{
                         nombre: profileNombre,
@@ -294,6 +380,7 @@
                     onLogout={logout}
                 />
 
+                <!-- MENSAJES DE ALERTA -->
                 {#if error}
                     <AlertMessage
                         type="error"
@@ -305,11 +392,12 @@
                 {#if success}
                     <AlertMessage
                         type="success"
-                        message="¡Reserva creada exitosamente!"
+                        message="¡Reserva creada exitosamente! Revisa tu historial abajo."
                         onClose={() => (success = false)}
                     />
                 {/if}
 
+                <!-- 2. FORMULARIO DE NUEVA RESERVA -->
                 <ReservaForm
                     {servicios}
                     {horarios}
@@ -321,6 +409,17 @@
                     {isSubmitting}
                     onSubmit={handleSubmit}
                 />
+
+                <!-- 3. HISTORIAL DE RESERVAS -->
+                <div id="historial-reservas">
+                    <HistorialReservas
+                        reservas={misReservas}
+                        onReload={async () => {
+                            await loadData();
+                            await loadMisReservas();
+                        }}
+                    />
+                </div>
             </div>
         {/if}
     </div>
