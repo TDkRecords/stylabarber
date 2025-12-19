@@ -19,35 +19,43 @@
         "Sábado",
     ];
 
-    // Obtener fecha mínima (hoy) - Corregir para zona horaria local
+    // Obtener fecha mínima (hoy) en zona horaria local
     const today = (() => {
         const d = new Date();
-        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-        return d.toISOString().split("T")[0];
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
     })();
 
     // Obtener fecha máxima (30 días adelante)
-    const maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + 30);
-    const maxDateStr = maxDate.toISOString().split("T")[0];
+    const maxDate = (() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 30);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    })();
 
     function getHorarioForDate(date) {
         if (!date) return null;
-        // Crear fecha en zona horaria local para evitar desfases
+
+        // Parsear la fecha correctamente en zona horaria local
         const [year, month, day] = date.split("-").map(Number);
         const localDate = new Date(year, month - 1, day);
         const dayIndex = localDate.getDay(); // 0 = Domingo, 1 = Lunes, etc.
 
-        console.log("Fecha seleccionada:", date);
+        console.log("📅 Fecha seleccionada:", date);
         console.log(
-            "Día de la semana (índice):",
+            "📆 Día de la semana (índice):",
             dayIndex,
             "=",
             diasSemana[dayIndex],
         );
 
         const horario = horarios.find((h) => h.dia === diasSemana[dayIndex]);
-        console.log("Horario encontrado:", horario);
+        console.log("⏰ Horario encontrado:", horario);
 
         return horario;
     }
@@ -55,6 +63,18 @@
     function isDayAvailable(date) {
         const horario = getHorarioForDate(date);
         return horario && !horario.cerrado;
+    }
+
+    function formatDateForDisplay(dateStr) {
+        const [year, month, day] = dateStr.split("-").map(Number);
+        const localDate = new Date(year, month - 1, day);
+
+        return localDate.toLocaleDateString("es-CO", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+        });
     }
 
     // Reactivo: resetear hora cuando cambia servicio o fecha
@@ -152,7 +172,7 @@
                     id="fecha"
                     bind:value={selectedDate}
                     min={today}
-                    max={maxDateStr}
+                    max={maxDate}
                     class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent text-base"
                     required
                 />
@@ -176,6 +196,15 @@
                             <p class="text-sm text-green-700">
                                 <i class="fas fa-check-circle mr-2"></i>
                                 Horario disponible: {horario.horaApertura} - {horario.horaCierre}
+                            </p>
+                        </div>
+                    {:else}
+                        <div
+                            class="mt-3 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg"
+                        >
+                            <p class="text-sm text-yellow-700">
+                                <i class="fas fa-exclamation-triangle mr-2"></i>
+                                No hay horario configurado para este día.
                             </p>
                         </div>
                     {/if}
@@ -258,15 +287,7 @@
                     <div class="flex justify-between items-center">
                         <span class="text-gray-600">Fecha:</span>
                         <span class="font-semibold">
-                            {new Date(selectedDate).toLocaleDateString(
-                                "es-CO",
-                                {
-                                    weekday: "long",
-                                    year: "numeric",
-                                    month: "long",
-                                    day: "numeric",
-                                },
-                            )}
+                            {formatDateForDisplay(selectedDate)}
                         </span>
                     </div>
 

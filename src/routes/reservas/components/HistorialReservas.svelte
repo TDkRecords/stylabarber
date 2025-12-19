@@ -31,7 +31,8 @@
     };
 
     function formatDate(dateStr) {
-        const date = new Date(dateStr + "T00:00:00");
+        const [year, month, day] = dateStr.split("-").map(Number);
+        const date = new Date(year, month - 1, day);
         return date.toLocaleDateString("es-CO", {
             weekday: "long",
             year: "numeric",
@@ -48,7 +49,6 @@
     }
 
     function canCancel(reserva) {
-        // Solo se puede cancelar si está pendiente o confirmada y no ha pasado
         return (
             (reserva.estado === "pendiente" ||
                 reserva.estado === "confirmada") &&
@@ -78,16 +78,15 @@
         }
     }
 
-    // Ordenar reservas: próximas primero, luego pasadas
     $: sortedReservas = [...reservas].sort((a, b) => {
         const dateA = new Date(a.fecha + "T" + a.hora);
         const dateB = new Date(b.fecha + "T" + b.hora);
-        return dateB - dateA; // Más recientes primero
+        return dateB - dateA;
     });
 </script>
 
 <div class="bg-white shadow-xl rounded-2xl overflow-hidden">
-    <div class="bg-linear-to-r from-black to-gray-800 text-white p-6">
+    <div class="bg-gradient-to-r from-black to-gray-800 text-white p-6">
         <h2 class="text-2xl font-bold flex items-center gap-3">
             <i class="fas fa-history"></i>
             Historial de Reservas
@@ -131,7 +130,6 @@
                         <div
                             class="flex flex-col md:flex-row justify-between gap-4"
                         >
-                            <!-- Información principal -->
                             <div class="flex-1">
                                 <div class="flex items-start gap-3 mb-3">
                                     <div
@@ -176,7 +174,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Estado y precio -->
                                 <div
                                     class="flex flex-wrap items-center gap-3 mt-3"
                                 >
@@ -198,18 +195,34 @@
                                         )}
                                     </span>
 
-                                    {#if isPast && reserva.estado !== "cancelada" && reserva.estado !== "completada"}
+                                    <!-- Mostrar estado de asistencia -->
+                                    {#if reserva.asistio === true}
+                                        <span
+                                            class="px-3 py-1 text-xs font-semibold rounded-full border
+                                                   bg-green-100 text-green-800 border-green-300 inline-flex items-center gap-1"
+                                        >
+                                            <i class="fas fa-user-check"></i>
+                                            Asististe a esta cita
+                                        </span>
+                                    {:else if reserva.asistio === false}
+                                        <span
+                                            class="px-3 py-1 text-xs font-semibold rounded-full border
+                                                   bg-red-100 text-red-800 border-red-300 inline-flex items-center gap-1"
+                                        >
+                                            <i class="fas fa-user-times"></i>
+                                            No asististe
+                                        </span>
+                                    {:else if isPast && reserva.estado !== "cancelada" && reserva.estado !== "completada"}
                                         <span
                                             class="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-full"
                                         >
                                             <i class="fas fa-history mr-1"></i>
-                                            Pasada
+                                            Pasada - Sin registro
                                         </span>
                                     {/if}
                                 </div>
                             </div>
 
-                            <!-- Acciones -->
                             {#if canCancel(reserva)}
                                 <div class="flex items-start">
                                     <button
