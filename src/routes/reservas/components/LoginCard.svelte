@@ -1,5 +1,7 @@
 <script>
     import { createEventDispatcher } from "svelte";
+    export let error = null;
+
     const dispatch = createEventDispatcher();
 
     let isLoading = false;
@@ -9,7 +11,6 @@
         try {
             await dispatch("login");
         } finally {
-            // Solo quitar loading si no estamos en redirect
             setTimeout(() => {
                 isLoading = false;
             }, 1000);
@@ -26,6 +27,21 @@
 
     <h2 class="text-2xl font-bold mb-3">Reserva tu cita</h2>
     <p class="text-gray-600 mb-8">Inicia sesión con Google para continuar</p>
+
+    {#if error}
+        <div
+            class="mb-6 bg-red-50 border-l-4 border-red-400 p-4 rounded-r-lg text-left"
+        >
+            <div class="flex items-start">
+                <i class="fas fa-exclamation-circle text-red-400 mr-3 mt-1"></i>
+                <div class="flex-1">
+                    <p class="text-sm text-red-700 whitespace-pre-line">
+                        {error}
+                    </p>
+                </div>
+            </div>
+        </div>
+    {/if}
 
     <button
         type="button"

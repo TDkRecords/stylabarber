@@ -36,8 +36,6 @@
     import {
         GoogleAuthProvider,
         signInWithPopup,
-        signInWithRedirect,
-        getRedirectResult,
         onAuthStateChanged,
         signOut,
     } from "firebase/auth";
@@ -55,7 +53,6 @@
     } from "../admin/citas/js/getReservation";
     import { addCita } from "../admin/citas/js/addReservation";
 
-    // IMPORTANTE: Días en orden correcto (0 = Domingo)
     const diasSemana = [
         "Domingo",
         "Lunes",
@@ -66,89 +63,47 @@
         "Sábado",
     ];
 
-    // ------------------ AUTH CORREGIDO ------------------
+    // ============================================
+    // AUTH SIMPLIFICADO - SOLO POPUP
+    // ============================================
     onMount(() => {
-        let unsubscribe;
+        const unsubscribe = onAuthStateChanged(auth, async (userAuth) => {
+            console.log("👤 Estado de auth:", userAuth?.email || "sin usuario");
 
-        const initAuth = async () => {
-            try {
-                // 1. Primero verificar si hay resultado de redirect
-                console.log("Verificando resultado de redirect...");
-                const result = await getRedirectResult(auth);
+            loading = true;
+            user = userAuth;
 
-                if (result) {
-                    console.log(
-                        "✅ Usuario autenticado desde redirect:",
-                        result.user.email,
-                    );
-                }
-            } catch (redirectError) {
-                console.error("❌ Error en getRedirectResult:", redirectError);
-
-                // Errores específicos
-                if (redirectError.code === "auth/unauthorized-domain") {
-                    error =
-                        "Dominio no autorizado. Verifica la configuración de Firebase.";
-                } else if (
-                    redirectError.code === "auth/operation-not-allowed"
-                ) {
-                    error =
-                        "Método de autenticación no habilitado en Firebase.";
-                } else if (redirectError.code === "auth/popup-blocked") {
-                    error = "El popup fue bloqueado. Intenta de nuevo.";
-                } else {
-                    error = `Error de autenticación: ${redirectError.message}`;
-                }
+            if (!userAuth) {
+                showProfileForm = false;
+                loading = false;
+                return;
             }
 
-            // 2. Escuchar cambios de autenticación
-            unsubscribe = onAuthStateChanged(auth, async (userAuth) => {
-                console.log(
-                    "🔄 Estado de autenticación cambió:",
-                    userAuth?.email || "sin usuario",
-                );
-                loading = true;
-                user = userAuth;
+            try {
+                const profile = await getClienteByUid(userAuth.uid);
 
-                if (!userAuth) {
+                if (!profile) {
+                    console.log("📝 Usuario nuevo, mostrar formulario");
+                    showProfileForm = true;
+                    profileNombre = userAuth.displayName || "";
+                    profileTelefono = "";
+                } else {
+                    console.log("✅ Perfil encontrado:", profile.nombre);
+                    profileNombre = profile.nombre;
+                    profileTelefono = profile.telefono;
                     showProfileForm = false;
-                    loading = false;
-                    return;
+                    await loadData();
+                    await loadMisReservas();
                 }
+            } catch (err) {
+                console.error("❌ Error cargando perfil:", err);
+                error = "Error al cargar el perfil del usuario";
+            } finally {
+                loading = false;
+            }
+        });
 
-                try {
-                    const profile = await getClienteByUid(userAuth.uid);
-
-                    if (!profile) {
-                        console.log(
-                            "📝 Usuario sin perfil, mostrando formulario",
-                        );
-                        showProfileForm = true;
-                        profileNombre = userAuth.displayName || "";
-                        profileTelefono = "";
-                    } else {
-                        console.log("✅ Perfil cargado:", profile.nombre);
-                        profileNombre = profile.nombre;
-                        profileTelefono = profile.telefono;
-                        showProfileForm = false;
-                        await loadData();
-                        await loadMisReservas();
-                    }
-                } catch (err) {
-                    console.error("❌ Error cargando perfil:", err);
-                    error = "Error al cargar el perfil del usuario";
-                } finally {
-                    loading = false;
-                }
-            });
-        };
-
-        initAuth();
-
-        // Cleanup
-        return () => {
-            if (unsubscribe) unsubscribe();
-        };
+        return () => unsubscribe();
     });
 
     async function loginWithGoogle() {
@@ -156,44 +111,35 @@
         loading = true;
 
         try {
-            console.log("🔐 Iniciando login con Google...");
+            console.log("🔐 Iniciando login con Google (POPUP)...");
 
             const provider = new GoogleAuthProvider();
             provider.setCustomParameters({
                 prompt: "select_account",
             });
 
-            // Detectar si es móvil
-            const isMobile = /Android|iPhone|iPad|iPod/i.test(
-                navigator.userAgent,
-            );
-            console.log("📱 Es móvil:", isMobile);
-
-            if (isMobile) {
-                console.log("🔄 Usando signInWithRedirect para móvil");
-                await signInWithRedirect(auth, provider);
-                // NO establecer loading = false aquí, la página se recargará
-            } else {
-                console.log("🪟 Usando signInWithPopup para escritorio");
-                const result = await signInWithPopup(auth, provider);
-                console.log("✅ Login exitoso:", result.user.email);
-                loading = false;
-            }
+            await signInWithPopup(auth, provider);
+            console.log("✅ Login exitoso");
         } catch (err) {
             console.error("❌ Error en login:", err);
 
-            // Solo mostrar error si no es que el usuario cerró el popup
+            // Manejar errores específicos
             if (err.code === "auth/popup-closed-by-user") {
                 console.log("ℹ️ Usuario cerró el popup");
+                error = null; // No mostrar error si el usuario cerró el popup
             } else if (err.code === "auth/cancelled-popup-request") {
                 console.log("ℹ️ Popup cancelado");
+                error = null;
             } else if (err.code === "auth/unauthorized-domain") {
                 error =
-                    "❌ Dominio no autorizado. Agrega tu dominio en Firebase Console → Authentication → Settings → Authorized domains";
+                    "⚠️ Error de configuración: El dominio no está autorizado en Firebase Console.\n\nPara resolver:\n1. Ve a Firebase Console\n2. Authentication → Settings → Authorized domains\n3. Agrega tu dominio actual";
+            } else if (err.code === "auth/popup-blocked") {
+                error =
+                    "El navegador bloqueó el popup. Por favor permite popups para este sitio.";
             } else {
-                error = `Error: ${err.message}`;
+                error = `Error al iniciar sesión: ${err.message}`;
             }
-
+        } finally {
             loading = false;
         }
     }
@@ -202,7 +148,6 @@
         try {
             console.log("👋 Cerrando sesión...");
             await signOut(auth);
-            // Limpiar estado
             profileNombre = "";
             profileTelefono = "";
             selectedService = null;
@@ -216,7 +161,10 @@
         }
     }
 
-    // ------------------ PERFIL ------------------
+    // ============================================
+    // RESTO DEL CÓDIGO (sin cambios)
+    // ============================================
+
     async function handleProfileSubmit() {
         if (!profileNombre || !profileTelefono) {
             error = "Nombre y teléfono obligatorios";
@@ -241,7 +189,6 @@
         }
     }
 
-    // ------------------ DATA ------------------
     async function loadData() {
         try {
             [horarios, servicios, citasExistentes] = await Promise.all([
@@ -286,7 +233,6 @@
         }
     }
 
-    // ------------------ HORARIOS ------------------
     function getHorarioForDate(date) {
         if (!date) return null;
 
@@ -348,13 +294,11 @@
         return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
     }
 
-    // Reactivo: cuando cambia servicio o fecha
     $: if (selectedService || selectedDate) {
         selectedTime = "";
         updateAvailableTimes();
     }
 
-    // ------------------ RESERVA ------------------
     async function handleSubmit() {
         try {
             isSubmitting = true;
@@ -403,7 +347,7 @@
         {#if loading}
             <LoadingSpinner />
         {:else if !user}
-            <LoginCard on:login={loginWithGoogle} />
+            <LoginCard on:login={loginWithGoogle} {error} />
         {:else if showProfileForm}
             <ProfileForm
                 {user}
