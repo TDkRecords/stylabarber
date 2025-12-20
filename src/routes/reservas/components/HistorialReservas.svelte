@@ -86,7 +86,7 @@
 </script>
 
 <div class="bg-white shadow-xl rounded-2xl overflow-hidden">
-    <div class="bg-gradient-to-r from-black to-gray-800 text-white p-6">
+    <div class="bg-linear-to-r from-black to-gray-800 text-white p-6">
         <h2 class="text-2xl font-bold flex items-center gap-3">
             <i class="fas fa-history"></i>
             Historial de Reservas
