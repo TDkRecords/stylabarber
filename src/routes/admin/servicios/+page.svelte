@@ -31,16 +31,22 @@
         }
     }
 
-    function clearForm() {
+    function resetForm() {
         nombre = "";
         descripcion = "";
         precio = null;
         duracion = null;
         editingServicio = null;
+        formError = null;
+    }
+
+    function closeForm() {
+        resetForm();
+        showForm = false;
     }
 
     function handleAdd() {
-        clearForm();
+        resetForm();
         showForm = true;
     }
 
@@ -51,22 +57,34 @@
         precio = servicio.precio || "";
         duracion = servicio.duracion || "";
         showForm = true;
+        formError = null;
     }
 
     async function handleSubmit() {
         formError = null;
 
-        if (!nombre.trim() || precio == null || duracion == null) {
-            formError = "Nombre, precio y duración son obligatorios";
+        // Validaciones
+        if (!nombre.trim()) {
+            formError = "El nombre es obligatorio";
             return;
         }
 
-        if (precio <= 0) {
+        if (precio == null || precio === "") {
+            formError = "El precio es obligatorio";
+            return;
+        }
+
+        if (duracion == null || duracion === "") {
+            formError = "La duración es obligatoria";
+            return;
+        }
+
+        if (Number(precio) <= 0) {
             formError = "El precio debe ser mayor a 0";
             return;
         }
 
-        if (duracion < 15) {
+        if (Number(duracion) < 15) {
             formError = "La duración mínima es 15 minutos";
             return;
         }
@@ -74,8 +92,8 @@
         const servicioData = {
             nombre: nombre.trim(),
             descripcion: descripcion.trim(),
-            precio,
-            duracion,
+            precio: Number(precio),
+            duracion: Number(duracion),
         };
 
         try {
@@ -91,8 +109,8 @@
             closeForm();
             await loadServicios();
         } catch (err) {
-            console.error(err);
-            formError = "Error al guardar el servicio";
+            console.error("Error guardando servicio:", err);
+            formError = "Error al guardar el servicio. Intenta nuevamente.";
         }
     }
 
@@ -144,103 +162,145 @@
         </div>
 
         {#if error}
-            <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-                <div class="flex">
-                    <i class="fas fa-exclamation-circle text-red-400"></i>
-                    <p class="ml-3 text-sm text-red-700">{error}</p>
+            <div
+                class="bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded-r-lg"
+            >
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-circle text-red-400 mr-3"></i>
+                    <p class="text-sm text-red-700">{error}</p>
+                    <button
+                        on:click={() => (error = null)}
+                        class="ml-auto text-red-400 hover:text-red-600"
+                        aria-label="Cerrar mensaje de error"
+                    >
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
             </div>
         {/if}
 
         {#if showForm}
-            <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
-                <div class="px-4 py-5 sm:p-6">
-                    <h3
-                        class="text-lg leading-6 font-medium text-gray-900 mb-4"
-                    >
+            <div
+                class="bg-white shadow-lg overflow-hidden sm:rounded-lg mb-8 border border-gray-200"
+            >
+                <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+                    <h3 class="text-lg leading-6 font-semibold text-gray-900">
                         {editingServicio ? "Editar Servicio" : "Nuevo Servicio"}
                     </h3>
+                </div>
+
+                <div class="px-6 py-5">
+                    {#if formError}
+                        <div
+                            class="bg-red-50 border-l-4 border-red-400 p-4 rounded-r-lg mb-6"
+                        >
+                            <div class="flex items-center">
+                                <i
+                                    class="fas fa-exclamation-circle text-red-400 mr-3"
+                                ></i>
+                                <p class="text-sm text-red-700">{formError}</p>
+                            </div>
+                        </div>
+                    {/if}
+
                     <form
                         on:submit|preventDefault={handleSubmit}
-                        class="space-y-4"
+                        class="space-y-5"
                     >
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div>
                                 <label
-                                    class="block text-sm font-medium text-gray-700 mb-1"
+                                    class="block text-sm font-medium text-gray-700 mb-2"
+                                    for="nombre"
                                 >
                                     Nombre del Servicio *
                                 </label>
                                 <input
+                                    id="nombre"
                                     type="text"
                                     bind:value={nombre}
                                     placeholder="Ej: Corte Clásico"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                     required
                                 />
                             </div>
 
                             <div>
                                 <label
-                                    class="block text-sm font-medium text-gray-700 mb-1"
+                                    class="block text-sm font-medium text-gray-700 mb-2"
+                                    for="precio"
                                 >
                                     Precio (COP) *
                                 </label>
                                 <input
+                                    id="precio"
                                     type="number"
                                     bind:value={precio}
                                     placeholder="Ej: 25000"
                                     step="1000"
-                                    min="0"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    min="1000"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                     required
                                 />
+                                <p class="mt-1 text-xs text-gray-500">
+                                    Precio en pesos colombianos
+                                </p>
                             </div>
 
                             <div>
                                 <label
-                                    class="block text-sm font-medium text-gray-700 mb-1"
+                                    class="block text-sm font-medium text-gray-700 mb-2"
+                                    for="duracion"
                                 >
                                     Duración (minutos) *
                                 </label>
                                 <input
+                                    id="duracion"
                                     type="number"
                                     bind:value={duracion}
                                     placeholder="Ej: 30"
                                     step="15"
                                     min="15"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                     required
                                 />
+                                <p class="mt-1 text-xs text-gray-500">
+                                    Mínimo 15 minutos
+                                </p>
                             </div>
 
                             <div>
                                 <label
-                                    class="block text-sm font-medium text-gray-700 mb-1"
+                                    class="block text-sm font-medium text-gray-700 mb-2"
+                                    for="descripcion"
                                 >
                                     Descripción
                                 </label>
                                 <input
+                                    id="descripcion"
                                     type="text"
                                     bind:value={descripcion}
                                     placeholder="Breve descripción del servicio"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                 />
                             </div>
                         </div>
 
-                        <div class="flex justify-end space-x-3 pt-4">
+                        <div
+                            class="flex justify-end space-x-3 pt-4 border-t border-gray-200"
+                        >
                             <button
                                 type="button"
                                 on:click={closeForm}
-                                class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                                class="px-6 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition"
                             >
                                 Cancelar
                             </button>
                             <button
                                 type="submit"
-                                class="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+                                class="px-6 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition"
                             >
+                                <i class="fas fa-save mr-2"></i>
                                 {editingServicio ? "Actualizar" : "Guardar"}
                             </button>
                         </div>
@@ -252,7 +312,7 @@
         {#if isLoading}
             <div class="flex justify-center items-center py-12">
                 <div
-                    class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"
+                    class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"
                 ></div>
             </div>
         {:else if servicios.length === 0}
