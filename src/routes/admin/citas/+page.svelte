@@ -204,6 +204,13 @@
 
 <section class="w-full min-h-screen bg-gray-50 py-8 px-4 sm:px-6">
     <div class="max-w-7xl mx-auto">
+        <!-- Breadcrumb -->
+        <nav class="mb-4 flex items-center text-sm text-gray-600">
+            <a href="/admin" class="hover:text-gray-900">Admin</a>
+            <i class="fas fa-chevron-right mx-2 text-xs"></i>
+            <span class="text-gray-900 font-medium">Citas</span>
+        </nav>
+
         <!-- Header -->
         <div class="mb-8">
             <div class="flex items-center justify-between mb-4">
