@@ -64,7 +64,7 @@
     ];
 
     // ============================================
-    // AUTH SIMPLIFICADO - SOLO POPUP
+    // AUTH - CONFIGURACIÓN MEJORADA
     // ============================================
     onMount(() => {
         const unsubscribe = onAuthStateChanged(auth, async (userAuth) => {
@@ -114,30 +114,73 @@
             console.log("🔐 Iniciando login con Google (POPUP)...");
 
             const provider = new GoogleAuthProvider();
+
+            // Configuración adicional del provider
             provider.setCustomParameters({
-                prompt: "select_account",
+                prompt: "select_account", // Fuerza la selección de cuenta
             });
 
-            await signInWithPopup(auth, provider);
-            console.log("✅ Login exitoso");
+            // Opcional: solicitar scopes adicionales si los necesitas
+            // provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+            // provider.addScope('https://www.googleapis.com/auth/userinfo.email');
+
+            const result = await signInWithPopup(auth, provider);
+
+            console.log("✅ Login exitoso:", result.user.email);
+
+            // El usuario se maneja automáticamente por onAuthStateChanged
         } catch (err) {
             console.error("❌ Error en login:", err);
 
-            // Manejar errores específicos
-            if (err.code === "auth/popup-closed-by-user") {
-                console.log("ℹ️ Usuario cerró el popup");
-                error = null; // No mostrar error si el usuario cerró el popup
-            } else if (err.code === "auth/cancelled-popup-request") {
-                console.log("ℹ️ Popup cancelado");
-                error = null;
-            } else if (err.code === "auth/unauthorized-domain") {
-                error =
-                    "⚠️ Error de configuración: El dominio no está autorizado en Firebase Console.\n\nPara resolver:\n1. Ve a Firebase Console\n2. Authentication → Settings → Authorized domains\n3. Agrega tu dominio actual";
-            } else if (err.code === "auth/popup-blocked") {
-                error =
-                    "El navegador bloqueó el popup. Por favor permite popups para este sitio.";
-            } else {
-                error = `Error al iniciar sesión: ${err.message}`;
+            // Manejar errores específicos de Firebase Auth
+            switch (err.code) {
+                case "auth/popup-closed-by-user":
+                    console.log("ℹ️ Usuario cerró el popup");
+                    // No mostrar error si el usuario cerró el popup intencionalmente
+                    error = null;
+                    break;
+
+                case "auth/cancelled-popup-request":
+                    console.log(
+                        "ℹ️ Popup cancelado (otro popup ya estaba abierto)",
+                    );
+                    error = null;
+                    break;
+
+                case "auth/popup-blocked":
+                    error =
+                        "⚠️ El navegador bloqueó el popup. Por favor:\n1. Permite ventanas emergentes para este sitio\n2. Verifica que no tengas bloqueadores de popups activos\n3. Intenta de nuevo";
+                    break;
+
+                case "auth/unauthorized-domain":
+                    error =
+                        "⚠️ Error de configuración del dominio.\n\nPara resolver:\n1. Ve a Firebase Console\n2. Authentication → Settings → Authorized domains\n3. Agrega el dominio actual a la lista";
+                    break;
+
+                case "auth/operation-not-allowed":
+                    error =
+                        "⚠️ El método de inicio de sesión con Google no está habilitado.\n\nPara resolver:\n1. Ve a Firebase Console\n2. Authentication → Sign-in method\n3. Habilita Google como proveedor";
+                    break;
+
+                case "auth/network-request-failed":
+                    error =
+                        "⚠️ Error de conexión. Verifica tu conexión a internet y vuelve a intentar.";
+                    break;
+
+                case "auth/too-many-requests":
+                    error =
+                        "⚠️ Demasiados intentos. Por favor espera unos minutos e intenta de nuevo.";
+                    break;
+
+                case "auth/user-disabled":
+                    error =
+                        "Esta cuenta ha sido deshabilitada. Contacta con el administrador.";
+                    break;
+
+                default:
+                    // Error genérico
+                    error = `Error al iniciar sesión: ${err.message || "Intenta de nuevo"}`;
+                    console.error("Error completo:", err);
             }
         } finally {
             loading = false;
@@ -148,47 +191,68 @@
         try {
             console.log("👋 Cerrando sesión...");
             await signOut(auth);
+
+            // Limpiar estado local
             profileNombre = "";
             profileTelefono = "";
             selectedService = null;
             selectedDate = "";
             selectedTime = "";
             misReservas = [];
-            console.log("✅ Sesión cerrada");
+            error = null;
+            success = false;
+
+            console.log("✅ Sesión cerrada exitosamente");
         } catch (err) {
             console.error("❌ Error en logout:", err);
-            error = "Error al cerrar sesión";
+            error = "Error al cerrar sesión. Por favor recarga la página.";
         }
     }
 
     // ============================================
-    // RESTO DEL CÓDIGO (sin cambios)
+    // PERFIL
     // ============================================
-
     async function handleProfileSubmit() {
-        if (!profileNombre || !profileTelefono) {
-            error = "Nombre y teléfono obligatorios";
+        if (!profileNombre.trim()) {
+            error = "El nombre es obligatorio";
+            return;
+        }
+
+        if (!profileTelefono.trim()) {
+            error = "El teléfono es obligatorio";
+            return;
+        }
+
+        // Validar formato de teléfono colombiano (10 dígitos)
+        const telefonoLimpio = profileTelefono.replace(/\s/g, "");
+        if (!/^\d{10}$/.test(telefonoLimpio)) {
+            error = "El teléfono debe tener 10 dígitos";
             return;
         }
 
         try {
             await addCliente({
                 uid: user.uid,
-                nombre: profileNombre,
-                telefono: profileTelefono,
+                nombre: profileNombre.trim(),
+                telefono: telefonoLimpio,
                 email: user.email,
-                photoURL: user.photoURL,
+                photoURL: user.photoURL || "",
             });
 
             showProfileForm = false;
+            error = null;
+
             await loadData();
             await loadMisReservas();
         } catch (err) {
             console.error("Error guardando perfil:", err);
-            error = "Error al guardar el perfil";
+            error = "Error al guardar el perfil. Por favor intenta nuevamente.";
         }
     }
 
+    // ============================================
+    // CARGA DE DATOS
+    // ============================================
     async function loadData() {
         try {
             [horarios, servicios, citasExistentes] = await Promise.all([
@@ -198,7 +262,7 @@
             ]);
         } catch (err) {
             console.error("Error cargando datos:", err);
-            error = "Error al cargar los datos";
+            error = "Error al cargar los datos. Por favor recarga la página.";
         }
     }
 
@@ -228,11 +292,13 @@
         } catch (err) {
             console.error("Error cargando mis reservas:", err);
             misReservas = [];
-            error =
-                "Error al cargar el historial de reservas. Intenta recargar la página.";
+            // No mostrar error aquí para no interferir con la experiencia del usuario
         }
     }
 
+    // ============================================
+    // LÓGICA DE RESERVAS
+    // ============================================
     function getHorarioForDate(date) {
         if (!date) return null;
 
