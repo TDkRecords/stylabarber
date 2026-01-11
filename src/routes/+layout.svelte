@@ -23,7 +23,6 @@
 
 	<div class="hidden sm:flex gap-6">
 		<a href="/" class="hover:text-gray-600">Inicio</a>
-		<a href="/servicios" class="hover:text-gray-600">Servicios</a>
 		<a href="/reservas" class="hover:text-gray-600">Reservas</a>
 		<a href="/galeria" class="hover:text-gray-600">Galería</a>
 		<a href="/contacto" class="hover:text-gray-600">Contacto</a>
@@ -36,7 +35,6 @@
 		class="fixed top-16 left-0 w-full bg-white border-t z-40 sm:hidden px-6 py-4"
 	>
 		<a href="/" class="block py-2">Inicio</a>
-		<a href="/servicios" class="block py-2">Servicios</a>
 		<a href="/reservas" class="block py-2">Reservas</a>
 		<a href="/galeria" class="block py-2">Galería</a>
 		<a href="/contacto" class="block py-2">Contacto</a>
